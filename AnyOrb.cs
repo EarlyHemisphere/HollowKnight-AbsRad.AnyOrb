@@ -137,7 +137,7 @@ public class AnyOrb : MonoBehaviour {
 
     private IEnumerator AddExtraOrbSpawns() {
         yield return null;
-        attackCommandsFSM.InsertAction("Orb Summon", new CallMethod {
+        attackCommandsFSM.InsertAction("Spawn Fireball", new CallMethod {
             behaviour = this,
             methodName = "SpawnExtraOrbs",
             parameters = new FsmVar[0],
