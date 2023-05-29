@@ -1,231 +1,388 @@
+using System;
 using System.Collections;
-using SFCore.Utils;
+using System.Collections.Generic;
 using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
+using ModCommon.Util;
 
-public class AnyOrb : MonoBehaviour {
-    private PlayMakerFSM attackCommandsFSM;
-    private PlayMakerFSM controlFSM;
-    private PlayMakerFSM orbPrefabFinalControlFSM;
-    private GameObject[] orbs;
-    private static int NUM_ORBS = 500;
-    private int spawningIdx;
-    private GameObject orbPrefab;
-    private float orbZ;
-    public void Awake() {
-        attackCommandsFSM = base.gameObject.LocateMyFSM("Attack Commands");
-        controlFSM = base.gameObject.LocateMyFSM("Control");
-        orbs = new GameObject[NUM_ORBS];
-        spawningIdx = 0;
-    }
+namespace AbsRadAnyOrb {
+    public class AnyOrb : MonoBehaviour {
+        private PlayMakerFSM attackCommandsFSM;
+        private PlayMakerFSM controlFSM;
+        private PlayMakerFSM attackChoicesFSM;
+        private static GameObject[] orbs;
+        private static int NUM_ORBS = 500;
+        private int spawningIdx = 0;
+        private GameObject currentOrb;
+        private static GameObject orbPrefab;
+        private GameObject knight;
+        private static GameObject eyeBeamGlow = null;
+        private HashSet<GameObject> orbRainOrbs = new HashSet<GameObject>();
+        private HashSet<GameObject> climbOrbs = new HashSet<GameObject>();
+        public void Awake() {
+            attackCommandsFSM = base.gameObject.LocateMyFSM("Attack Commands");
+            controlFSM = base.gameObject.LocateMyFSM("Control");
+            attackChoicesFSM = base.gameObject.LocateMyFSM("Attack Choices");
+            knight = GameObject.Find("Knight");
+        }
 
-    public void Start() {
-        Modding.Logger.Log("Changing AbsRad orb spawning behavior...");
+        public void Start() {
+            StartCoroutine(AddExtraOrbSpawns());
+            currentOrb = orbs[spawningIdx];
 
-        foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>()) {
-            if (go.name == "Radiant Orb") {
-                orbPrefab = go;
-                orbPrefabFinalControlFSM = orbPrefab.LocateMyFSM("Final Control");
+            // Allow only orb attacks
+            SendRandomEventV3 a1Choice = attackChoicesFSM.GetAction<SendRandomEventV3>("A1 Choice", 1);
+            SendRandomEventV3 a2Choice = attackChoicesFSM.GetAction<SendRandomEventV3>("A2 Choice", 1);
+            a1Choice.weights = new FsmFloat[]{0, 0, 0, 0, 0, 0, 0, 1};
+            a1Choice.eventMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
+            a1Choice.missedMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000};
+            a2Choice.weights = new FsmFloat[]{0, 0, 1, 0, 0, 0};
+            a2Choice.eventMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000};
+            a2Choice.missedMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000};
+
+            // Configure orbs
+            foreach (GameObject orb in orbs) {
+                PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+                FsmVar var = new FsmVar();
+                var.SetValue(orb);
+                orbControlFSM.AddAction("Impact", new CallMethod {
+                    behaviour = this,
+                    methodName = "DespawnOrb",
+                    parameters = new FsmVar[1]{var},
+                    everyFrame = false
+                });
+                orbControlFSM.AddAction("Stop Particles", new CallMethod {
+                    behaviour = this,
+                    methodName = "DespawnOrb",
+                    parameters = new FsmVar[1]{var},
+                    everyFrame = false
+                });
+            }
+
+            // Orb rain
+            controlFSM.GetAction<Wait>("Rage Comb", 0).time = 0.4f;
+            controlFSM.RemoveAction("Rage Comb", 2);
+            controlFSM.RemoveAction("Rage Comb", 1);
+            controlFSM.AddAction("Rage Comb", new CallMethod {
+                behaviour = this,
+                methodName = "SpawnOrbRainWave",
+                parameters = new FsmVar[0],
+                everyFrame = false
+            });
+            controlFSM.AddAction("Rage Comb", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            controlFSM.AddAction("Stun1 Start", new CallMethod {
+                behaviour = this,
+                methodName = "DespawnAllOrbs",
+                parameters = new FsmVar[0],
+                everyFrame = false
+            });
+
+            // Climb orb attack
+            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).min = -3f;
+            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).max = 3f;
+            attackCommandsFSM.GetAction<Wait>("Aim", 11).time = 0.25f;
+            attackCommandsFSM.RemoveAction("Aim", 10);
+            attackCommandsFSM.RemoveAction("Aim", 9);
+            attackCommandsFSM.RemoveAction("Aim", 3);
+            attackCommandsFSM.RemoveAction("Aim", 1);
+            attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            attackCommandsFSM.AddAction("Aim Back", new CallMethod {
+                behaviour = this,
+                methodName = "FireOrb",
+                parameters = new FsmVar[0],
+                everyFrame = false
+            });
+            attackCommandsFSM.AddAction("Aim Back", new Wait {
+                time = 0.25f,
+                finishEvent = new FsmEvent("FINISHED"),
+                realTime = false
+            });
+            controlFSM.AddAction("Scream", new CallMethod {
+                behaviour = this,
+                methodName = "DespawnAllOrbs",
+                parameters = new FsmVar[0],
+                everyFrame = false
+            });
+        }
+
+        private void Update() {
+            // Bit of a performance hit here, but I'm too lazy to figure out why the Final Control FSM is not doing its job
+            PlayMakerFSM finalControl = orbPrefab.LocateMyFSM("Final Control");
+            float minX = finalControl.FsmVariables.GetFsmFloat("Min X").Value;
+            float maxX = finalControl.FsmVariables.GetFsmFloat("Max X").Value;
+            float minY = finalControl.FsmVariables.GetFsmFloat("Min Y").Value;
+            float maxY = finalControl.FsmVariables.GetFsmFloat("Max Y").Value;
+            if (attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Min Y").Value > 150f) {
+                climbOrbs = new HashSet<GameObject>();
+                foreach(GameObject orb in orbs) {
+                    if (orb.activeSelf) {
+                        if (orb.transform.position.x < minX ||
+                            orb.transform.position.x > maxX ||
+                            orb.transform.position.y < minY ||
+                            orb.transform.position.y > maxY
+                        ) {
+                            orb.SetActive(false);
+                        }
+                    }
+                }
+            }
+
+            foreach(GameObject orb in orbRainOrbs) {
+                if (orb.transform.position.y < 0) {
+                    orb.SetActive(false);
+                } else {
+                    orb.transform.Translate(Vector3.down * 15 * Time.deltaTime);
+                }
+            }
+            orbRainOrbs.RemoveWhere(orb => orb.activeSelf == false);
+
+            foreach(GameObject orb in climbOrbs) {
+                orb.transform.Translate(orb.transform.right * 50 * Time.deltaTime);
             }
         }
-        
-        for(int i = 0; i < NUM_ORBS; i++) {
-            if (!orbs[i]) {
-                GameObject orb = GameObject.Instantiate(orbPrefab);
+
+        private IEnumerator AddExtraOrbSpawns() {
+            yield return null;
+            attackCommandsFSM.InsertAction("Spawn Fireball", new CallMethod {
+                behaviour = this,
+                methodName = "SpawnExtraOrbs",
+                parameters = new FsmVar[0],
+                everyFrame = false
+            }, 0);
+        }
+
+        public void SpawnExtraOrbs() {
+            float orbMinX = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Min X").Value;
+            float orbMaxX = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max X").Value;
+            float orbMinY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Min Y").Value;
+            float orbMaxY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max Y").Value;
+            float minDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value;
+            float maxDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value;
+            Vector3 radPos = base.gameObject.transform.position;
+            Vector3 innerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -minDist, 0);
+            Vector3 outerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -maxDist, 0);
+
+            // Spawn along top of range
+            for (float x = orbMinX; x < orbMaxX; x += 2f) {
+                float distance = Vector2.Distance(new Vector2(x, orbMaxY), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                if (distance >= minDist && distance <= maxDist) {
+                    SpawnOrb(x, orbMaxY);
+                }
+            }
+
+            // Spawn along bottom of range
+            for (float x = orbMinX; x < orbMaxX; x += 2f) {
+                float distance = Vector2.Distance(new Vector2(x, orbMinY), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                if (distance >= minDist && distance <= maxDist) {
+                    SpawnOrb(x, orbMinY);
+                }
+            }
+
+            // Spawn along left side of range
+            for (float y = orbMinY; y < orbMaxY; y += 2f) {
+                float distance = Vector2.Distance(new Vector2(orbMinX, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                if (distance >= minDist && distance <= maxDist) {
+                    SpawnOrb(orbMinX, y);
+                }
+            }
+
+            // Spawn along right side of range
+            for (float y = orbMinY; y < orbMaxY; y += 2f) {
+                float distance = Vector2.Distance(new Vector2(orbMaxX, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                if (distance >= minDist && distance <= maxDist) {
+                    SpawnOrb(orbMaxX, y);
+                }
+            }
+            
+            // Spawn along inner circle
+            for (float degrees = 0; degrees < 360; degrees += 45) {
+                Vector3 rotatedPos = Quaternion.Euler(0, 0, degrees) * (innerCircleStartingPos - radPos) + radPos;
+                if (rotatedPos.x >= orbMinX && rotatedPos.x <= orbMaxX && rotatedPos.y >= orbMinY && rotatedPos.y <= orbMaxY) {
+                    SpawnOrb(rotatedPos.x, rotatedPos.y);
+                }
+            }
+
+            // Spawn along outer circle
+            for (float degrees = 0; degrees < 360; degrees += 15) {
+                Vector3 rotatedPos = Quaternion.Euler(0, 0, degrees) * (outerCircleStartingPos - radPos) + radPos;
+                if (rotatedPos.x >= orbMinX && rotatedPos.x <= orbMaxX && rotatedPos.y >= orbMinY && rotatedPos.y <= orbMaxY) {
+                    SpawnOrb(rotatedPos.x, rotatedPos.y);
+                }
+            }
+
+            // Fill out inside boundaries
+            if (orbMinY > 150f) {
+                // Final Phase
+                for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
+                    float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                    if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
+                        distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
+                        continue;
+                    }
+
+                    SpawnOrb(x, 157);
+                }
+            } else {
+                for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
+                    for (float y = orbMinY + 1; y <= orbMaxY - 1; y += 2f) {
+                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                        if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
+                            distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
+                            continue;
+                        }
+
+                        SpawnOrb(x, y);
+                    }
+                }
+            }
+        }
+
+        private void SpawnOrb(float x, float y) {
+            currentOrb.transform.SetPosition2D(x, y);
+            currentOrb.GetComponent<Rigidbody2D>().isKinematic = true;
+            currentOrb.SetActive(true);
+            currentOrb.LocateMyFSM("Orb Control").SendEvent("FIRE");
+            IncrementSpawningOrb();
+        }
+
+        public void SpawnOrbRainWave() {
+            float x = 40;
+            for (int _ = 0; _ < 15; _++) {
+                x += UnityEngine.Random.Range(2.5f, 5f);
+                currentOrb.transform.SetPosition2D(x, 35f);
+                currentOrb.transform.GetComponent<Rigidbody2D>().isKinematic = false;
+                currentOrb.SetActive(true);
+                orbRainOrbs.Add(currentOrb);
+                IncrementSpawningOrb();
+            }
+        }
+
+        public void FireOrb() {
+            float rotation = attackCommandsFSM.FsmVariables.GetFsmFloat("Rotation").Value;
+            if (eyeBeamGlow == null) {
+                eyeBeamGlow = GameObject.Find("Eye Beam Glow");
+            }
+
+            currentOrb.transform.SetPosition2D(eyeBeamGlow.transform.position.x, eyeBeamGlow.transform.position.y);
+            currentOrb.GetComponent<Rigidbody2D>().isKinematic = false;
+
+            // Move orb closer to player when spawning
+            if (eyeBeamGlow.transform.position.y - knight.transform.position.y > 15f) {
+                currentOrb.transform.Translate(new Vector3(Mathf.Tan((rotation - 270) * Mathf.Deg2Rad) * (eyeBeamGlow.transform.position.y - knight.transform.position.y - 15), -(eyeBeamGlow.transform.position.y - knight.transform.position.y - 15)));
+            }
+
+            // Rotate orb to face along beam indicator
+            currentOrb.transform.eulerAngles = new Vector3(0, 0, rotation / 2); // I have no idea why dividing by 2 is necessary here
+
+            currentOrb.SetActive(true);
+            climbOrbs.Add(currentOrb);
+            IncrementSpawningOrb();
+
+            StartCoroutine(RemoveFiredOrb(currentOrb));
+        }
+
+        public IEnumerator RemoveFiredOrb(GameObject orb) {
+            yield return DespawnOrb(orb);
+            climbOrbs.Remove(orb);
+        }
+
+        public IEnumerator DespawnOrb(GameObject orb) {
+            yield return new WaitForSeconds(2);
+            orb.SetActive(false);
+        }
+
+        public void DespawnAllOrbs() {
+            foreach(GameObject orb in orbRainOrbs) {
                 orb.SetActive(false);
-                MeshRenderer orbMeshRenderer = orb.GetComponent<MeshRenderer>();
-                orbMeshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
-                orbMeshRenderer.receiveShadows = false;
-                orbMeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                orbMeshRenderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
-                PlayMakerFSM orbControl = orb.LocateMyFSM("Orb Control");
-                orbControl.RemoveAction("Init", 9);
-                orbControl.RemoveAction("Init", 8);
-                orbControl.RemoveAction("Init", 7);
-                orbControl.RemoveAction("Init", 6);
-                orbControl.RemoveAction("Init", 3);
-                orbControl.RemoveAction("Init", 0);
-                orbControl.RemoveAction("Impact", 11);
-                orbControl.RemoveAction("Impact", 10);
-                orbControl.RemoveAction("Impact", 8);
-                orbControl.RemoveAction("Impact", 6);
-                orbControl.RemoveAction("Impact", 5);
-                orbControl.RemoveAction("Impact", 4);
-                orbControl.RemoveAction("Impact", 1);
-                orbControl.RemoveAction("Impact", 0);
-                orbControl.RemoveAction("Dissipate", 4);
-                orbControl.RemoveAction("Dissipate", 0);
-                orbControl.RemoveAction("Stop Particles", 0);
-                orbControl.ChangeTransition("Impact", "FINISHED", "Init");
-                FsmOwnerDefault ownerDefault = new FsmOwnerDefault();
-                ownerDefault.OwnerOption = OwnerDefaultOption.UseOwner;
-                orbControl.AddAction("Impact", new ActivateGameObject {
-                    gameObject = ownerDefault,
-                    activate = false,
-                    recursive = false,
-                    resetOnExit = false,
-                    everyFrame = false
-                });
-                orbControl.AddAction("Stop Particles", new ActivateGameObject {
-                    gameObject = ownerDefault,
-                    activate = false,
-                    recursive = false,
-                    resetOnExit = false,
-                    everyFrame = false
-                });
-                orbControl.ChangeTransition("Stop Particles", "FINISHED", "Init");
-                orbControl.RemoveFsmState("Recycle");
-                GameObject.DestroyImmediate(orb.GetComponent<AudioSource>());
-                for (int j = 0; j < orb.transform.childCount; j++) {
-                    GameObject child = orb.transform.GetChild(j).gameObject;
-                    if (child.name == "Fader" ||
-                        child.name == "Fader Old" ||
-                        child.name == "Appear Glow" ||
-                        child.name == "Particle System" ||
-                        child.name == "Impact" ||
-                        child.name == "Impact Particles") {
-                        GameObject.Destroy(child);
-                    }
-                }
-                // Component copy = orb.AddComponent<PlayMakerFSM>();
-                // foreach (FieldInfo field in orbPrefabFinalControlFSM.GetType().GetFields()) {
-                //     field.SetValue(copy, field.GetValue(orbPrefabFinalControlFSM));
-                // }
-                PlayMakerFSM finalControlFSM = orb.LocateMyFSM("Final Control");
-                finalControlFSM.RemoveFsmState("Recycle");
-                // finalControlFSM.AddFsmState("Deactivate");
-                // finalControlFSM.AddAction("Deactivate", new ActivateGameObject {
-                //     gameObject = ownerDefault,
-                //     activate = false,
-                //     recursive = false,
-                //     resetOnExit = false,
-                //     everyFrame = false
-                // });
-                // finalControlFSM.AddTransition("Check", "END", "Deactivate");
-                // finalControlFSM.AddTransition("Deactivate", "FINISHED", "Check");
-                // GameObjectExtensions.PrintSceneHierarchyTree(orb);
-                orbs[i] = orb;
             }
+            foreach(GameObject orb in climbOrbs) {
+                orb.SetActive(false);
+            }
+            orbRainOrbs = new HashSet<GameObject>();
+            climbOrbs = new HashSet<GameObject>();
+        }
+
+        public void IncrementSpawningOrb() {
+            spawningIdx = (spawningIdx + 1) % NUM_ORBS;
+            currentOrb = orbs[spawningIdx];
         }
         
-        orbZ = attackCommandsFSM.GetAction<SetVector3XYZ>("Orb Pos", 2).z.Value;
-        StartCoroutine(AddExtraOrbSpawns());
-    }
+        public static void InstantiateOrbs(GameObject prefab) {
+            Modding.Logger.Log("INSTANTIATE");
+            Modding.Logger.Log(prefab);
+            orbs = new GameObject[NUM_ORBS];
+            orbPrefab = prefab;
+            
+            for(int i = 0; i < NUM_ORBS; i++) {
+                if (!orbs[i]) {
+                    GameObject orb = GameObject.Instantiate(prefab);
+                    orb.SetActive(false);
+                    MeshRenderer orbMeshRenderer = orb.GetComponent<MeshRenderer>();
+                    orbMeshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+                    orbMeshRenderer.receiveShadows = false;
+                    orbMeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    orbMeshRenderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
+                    PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+                    orbControlFSM.RemoveAction("Init", 9);
+                    orbControlFSM.RemoveAction("Init", 8);
+                    orbControlFSM.RemoveAction("Init", 7);
+                    orbControlFSM.RemoveAction("Init", 6);
+                    // orbControlFSM.RemoveAction("Init", 3);
+                    orbControlFSM.RemoveAction("Init", 1);
+                    orbControlFSM.RemoveAction("Init", 0);
+                    orbControlFSM.RemoveAction("Impact", 8);
+                    orbControlFSM.RemoveAction("Impact", 7);
+                    orbControlFSM.RemoveAction("Impact", 6);
+                    orbControlFSM.RemoveAction("Impact", 5);
+                    orbControlFSM.RemoveAction("Impact", 4);
+                    orbControlFSM.RemoveAction("Impact", 1);
+                    orbControlFSM.RemoveAction("Impact", 0);
+                    orbControlFSM.RemoveAction("Stop Particles", 1);
+                    orbControlFSM.ChangeTransition("Impact", "FINISHED", "Init");
+                    orbControlFSM.ChangeTransition("Stop Particles", "FINISHED", "Init");
+                    for (int j = 0; j < orb.transform.childCount; j++) {
+                        GameObject child = orb.transform.GetChild(j).gameObject;
+                        if (child.name == "Appear Glow" ||
+                            child.name == "Fader Old" ||
+                            child.name == "Particle System" ||
+                            child.name == "Impact" ||
+                            child.name == "Impact Particles") {
+                            GameObject.Destroy(child);
+                        }
+                    }
+                    FsmOwnerDefault ownerDefault = new FsmOwnerDefault();
+                    ownerDefault.OwnerOption = OwnerDefaultOption.UseOwner;
+                    orbControlFSM.AddAction("Impact", new ActivateGameObject {
+                        gameObject = ownerDefault,
+                        activate = false,
+                        recursive = false,
+                        resetOnExit = false,
+                        everyFrame = false
+                    });
+                    orbControlFSM.AddAction("Stop Particles", new ActivateGameObject {
+                        gameObject = ownerDefault,
+                        activate = false,
+                        recursive = false,
+                        resetOnExit = false,
+                        everyFrame = false
+                    });
+                    GameObject.DestroyImmediate(orb.GetComponent<AudioSource>());
+                    PlayMakerFSM finalControlFSM = orb.LocateMyFSM("Final Control");
+                    finalControlFSM.RemoveTransition("Check", "FINISHED");
+                    UnityEngine.Object.DontDestroyOnLoad(orb);
 
-    private void Update() {
-        // Bit of a performance hit here, but I could not get the code above to work and I'm lazy
-        PlayMakerFSM finalControl = orbPrefab.LocateMyFSM("Final Control");
-        float minX = finalControl.FsmVariables.GetFsmFloat("Min X").Value;
-        float maxX = finalControl.FsmVariables.GetFsmFloat("Max X").Value;
-        float minY = finalControl.FsmVariables.GetFsmFloat("Min Y").Value;
-        float maxY = finalControl.FsmVariables.GetFsmFloat("Max Y").Value;
-        if (controlFSM.FsmVariables.GetFsmBool("Ascend Ready").Value == true && base.gameObject.transform.GetPositionY() > 150f) {
-            foreach(GameObject orb in orbs) {
-                if (orb.activeSelf) {
-                    if (orb.transform.GetPositionX() < minX ||
-                        orb.transform.GetPositionX() > maxX ||
-                        orb.transform.GetPositionY() < minY ||
-                        orb.transform.GetPositionY() > maxY
-                    ) {
-                        orb.SetActive(false);
+                    orbs[i] = orb;
+
+                    // Fire orb once so one-time effects don't appear in the Absolute Radiance fight
+                    try {
+                        orb.SetActive(true);
+                        orbControlFSM.SendEvent("FIRE");
+                    } catch (NullReferenceException _) {
+                        // Cannot chase player because player does not exist. Ignore
                     }
                 }
             }
         }
-    }
-
-    private IEnumerator AddExtraOrbSpawns() {
-        yield return null;
-        attackCommandsFSM.InsertAction("Spawn Fireball", new CallMethod {
-            behaviour = this,
-            methodName = "SpawnExtraOrbs",
-            parameters = new FsmVar[0],
-            everyFrame = false
-        }, 0);
-    }
-
-    public void SpawnExtraOrbs() {
-        float orbMinX = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Min X").Value;
-        float orbMaxX = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max X").Value;
-        float orbMinY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Min Y").Value;
-        float orbMaxY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max Y").Value;
-        float minDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value;
-        float maxDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value;
-        Vector3 radPos = base.gameObject.transform.position;
-        Vector3 innerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -minDist, 0);
-        Vector3 outerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -maxDist, 0);
-
-        // Spawn along top of range
-        for (float x = orbMinX; x < orbMaxX; x += 2.5f) {
-            float distance = Vector2.Distance(new Vector2(x, orbMaxY), new Vector2(base.gameObject.transform.GetPositionX(), base.gameObject.transform.GetPositionY()));
-            if (distance >= minDist && distance <= maxDist) {
-                SpawnOrb(x, orbMaxY);
-            }
-        }
-
-        // Spawn along bottom of range
-        for (float x = orbMinX; x < orbMaxX; x += 2.5f) {
-            float distance = Vector2.Distance(new Vector2(x, orbMinY), new Vector2(base.gameObject.transform.GetPositionX(), base.gameObject.transform.GetPositionY()));
-            if (distance >= minDist && distance <= maxDist) {
-                SpawnOrb(x, orbMinY);
-            }
-        }
-
-        // Spawn along left side of range
-        for (float y = orbMinY; y < orbMaxY; y += 2.5f) {
-            float distance = Vector2.Distance(new Vector2(orbMinX, y), new Vector2(base.gameObject.transform.GetPositionX(), base.gameObject.transform.GetPositionY()));
-            if (distance >= minDist && distance <= maxDist) {
-                SpawnOrb(orbMinX, y);
-            }
-        }
-
-        // Spawn along right side of range
-        for (float y = orbMinY; y < orbMaxY; y += 2.5f) {
-            float distance = Vector2.Distance(new Vector2(orbMaxX, y), new Vector2(base.gameObject.transform.GetPositionX(), base.gameObject.transform.GetPositionY()));
-            if (distance >= minDist && distance <= maxDist) {
-                SpawnOrb(orbMaxX, y);
-            }
-        }
-        
-        // Spawn along inner circle
-        for (float degrees = 0; degrees < 360; degrees += 45) {
-            Vector3 rotatedPos = Quaternion.Euler(0, 0, degrees) * (innerCircleStartingPos - radPos) + radPos;
-            if (rotatedPos.x >= orbMinX && rotatedPos.x <= orbMaxX && rotatedPos.y >= orbMinY && rotatedPos.y <= orbMaxY) {
-                SpawnOrb(rotatedPos.x, rotatedPos.y);
-            }
-        }
-
-        // Spawn along outer circle
-        for (float degrees = 0; degrees < 360; degrees += 15) {
-            Vector3 rotatedPos = Quaternion.Euler(0, 0, degrees) * (outerCircleStartingPos - radPos) + radPos;
-            if (rotatedPos.x >= orbMinX && rotatedPos.x <= orbMaxX && rotatedPos.y >= orbMinY && rotatedPos.y <= orbMaxY) {
-                SpawnOrb(rotatedPos.x, rotatedPos.y);
-            }
-        }
-
-        // Fill out inside boundaries
-        for (float x = orbMinX + 2; x < orbMaxX - 2; x += 2.5f) {
-            for (float y = orbMinY + 2; y < orbMaxY - 2; y += 2.5f) {
-                float distance = Vector2.Distance(new Vector2(x, y), new Vector2(base.gameObject.transform.GetPositionX(), base.gameObject.transform.GetPositionY()));
-                if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
-                    distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
-                    continue;
-                }
-
-                SpawnOrb(x, y);
-            }
-        }
-    }
-
-    private void SpawnOrb(float x, float y) {
-        orbs[spawningIdx].transform.SetPosition3D(x, y, orbZ);
-        orbs[spawningIdx].SetActive(true);
-        orbs[spawningIdx].GetComponent<PlayMakerFSM>().SendEvent("FIRE");
-        spawningIdx = (spawningIdx + 1) % NUM_ORBS;
-    }
-
-    public void Unload() {
-        attackCommandsFSM.RemoveAction("Orb Summon", 0);
     }
 }
