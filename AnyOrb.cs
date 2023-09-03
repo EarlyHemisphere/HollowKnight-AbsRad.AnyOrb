@@ -59,6 +59,9 @@ namespace AbsRadAnyOrb {
                     everyFrame = false
                 });
             }
+            attackCommandsFSM.RemoveAction("Orb Summon", 5);
+            attackCommandsFSM.RemoveAction("Orb Summon", 4);
+            attackCommandsFSM.RemoveAction("Spawn Fireball", 1);
 
             // Orb rain
             controlFSM.GetAction<Wait>("Rage Comb", 0).time = 0.4f;
@@ -79,12 +82,12 @@ namespace AbsRadAnyOrb {
             });
 
             // Climb orb attack
-            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).min = -3f;
-            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).max = 3f;
-            attackCommandsFSM.GetAction<Wait>("Aim", 11).time = 0.25f;
+            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).min = -3.5f;
+            attackCommandsFSM.GetAction<RandomFloat>("Aim", 4).max = 3.5f;
+            attackCommandsFSM.GetAction<Wait>("Aim", 11).time = 0.20f;
             attackCommandsFSM.RemoveAction("Aim", 10);
             attackCommandsFSM.RemoveAction("Aim", 9);
-            attackCommandsFSM.RemoveAction("Aim", 3);
+            attackCommandsFSM.RemoveAction("Aim", 3);                                                                                                               
             attackCommandsFSM.RemoveAction("Aim", 1);
             attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
             attackCommandsFSM.AddAction("Aim Back", new CallMethod {
@@ -94,7 +97,7 @@ namespace AbsRadAnyOrb {
                 everyFrame = false
             });
             attackCommandsFSM.AddAction("Aim Back", new Wait {
-                time = 0.25f,
+                time = 0.20f,
                 finishEvent = new FsmEvent("FINISHED"),
                 realTime = false
             });
@@ -138,7 +141,7 @@ namespace AbsRadAnyOrb {
             orbRainOrbs.RemoveWhere(orb => orb.activeSelf == false);
 
             foreach(GameObject orb in climbOrbs) {
-                orb.transform.Translate(orb.transform.right * 50 * Time.deltaTime);
+                orb.transform.Translate(orb.transform.right * 60 * Time.deltaTime);
             }
         }
 
@@ -213,7 +216,7 @@ namespace AbsRadAnyOrb {
 
             // Fill out inside boundaries
             if (orbMinY > 150f) {
-                // Final Phase
+                // Final phase
                 for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
                     float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
                     if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
@@ -248,8 +251,8 @@ namespace AbsRadAnyOrb {
 
         public void SpawnOrbRainWave() {
             float x = 40;
-            for (int _ = 0; _ < 15; _++) {
-                x += UnityEngine.Random.Range(2.5f, 5f);
+            for (int _ = 0; _ < 20; _++) {
+                x += UnityEngine.Random.Range(2.5f, 4.0f);
                 currentOrb.transform.SetPosition2D(x, 35f);
                 currentOrb.transform.GetComponent<Rigidbody2D>().isKinematic = false;
                 currentOrb.SetActive(true);
@@ -309,8 +312,6 @@ namespace AbsRadAnyOrb {
         }
         
         public static void InstantiateOrbs(GameObject prefab) {
-            Modding.Logger.Log("INSTANTIATE");
-            Modding.Logger.Log(prefab);
             orbs = new GameObject[NUM_ORBS];
             orbPrefab = prefab;
             
@@ -378,7 +379,7 @@ namespace AbsRadAnyOrb {
                     try {
                         orb.SetActive(true);
                         orbControlFSM.SendEvent("FIRE");
-                    } catch (NullReferenceException _) {
+                    } catch (NullReferenceException) {
                         // Cannot chase player because player does not exist. Ignore
                     }
                 }
