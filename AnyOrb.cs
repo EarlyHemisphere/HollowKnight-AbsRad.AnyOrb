@@ -73,7 +73,7 @@ namespace AbsRadAnyOrb {
                 parameters = new FsmVar[0],
                 everyFrame = false
             });
-            controlFSM.AddAction("Rage Comb", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            controlFSM.AddAction("Rage Comb", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 3));
             controlFSM.AddAction("Stun1 Start", new CallMethod {
                 behaviour = this,
                 methodName = "DespawnAllOrbs",
@@ -89,7 +89,7 @@ namespace AbsRadAnyOrb {
             attackCommandsFSM.RemoveAction("Aim", 9);
             attackCommandsFSM.RemoveAction("Aim", 3);                                                                                                               
             attackCommandsFSM.RemoveAction("Aim", 1);
-            attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 3));
             attackCommandsFSM.AddAction("Aim Back", new CallMethod {
                 behaviour = this,
                 methodName = "FireOrb",
