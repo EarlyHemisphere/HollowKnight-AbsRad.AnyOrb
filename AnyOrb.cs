@@ -21,6 +21,7 @@ namespace AbsRadAnyOrb {
         private static GameObject eyeBeamGlow = null;
         private HashSet<GameObject> orbRainOrbs = new HashSet<GameObject>();
         private HashSet<GameObject> climbOrbs = new HashSet<GameObject>();
+
         public void Awake() {
             attackCommandsFSM = base.gameObject.LocateMyFSM("Attack Commands");
             controlFSM = base.gameObject.LocateMyFSM("Control");
@@ -74,7 +75,7 @@ namespace AbsRadAnyOrb {
                 parameters = new FsmVar[0],
                 everyFrame = false
             });
-            controlFSM.AddAction("Rage Comb", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            controlFSM.AddAction("Rage Comb", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 3));
             controlFSM.AddAction("Stun1 Start", new CallMethod {
                 behaviour = this,
                 methodName = "DespawnAllOrbs",
@@ -90,7 +91,7 @@ namespace AbsRadAnyOrb {
             attackCommandsFSM.RemoveAction("Aim", 9);
             attackCommandsFSM.RemoveAction("Aim", 3);                                                                                                               
             attackCommandsFSM.RemoveAction("Aim", 1);
-            attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 4));
+            attackCommandsFSM.AddAction("Aim Back", attackCommandsFSM.GetAction<AudioPlaySimple>("Spawn Fireball", 3));
             attackCommandsFSM.AddAction("Aim Back", new CallMethod {
                 behaviour = this,
                 methodName = "FireOrb",
@@ -380,6 +381,8 @@ namespace AbsRadAnyOrb {
                     } catch (NullReferenceException) {
                         // Cannot chase player because player does not exist. Ignore
                     }
+
+                    orbs[i] = orb;
                 }
             }
         }
