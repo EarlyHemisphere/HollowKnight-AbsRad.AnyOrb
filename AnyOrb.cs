@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
-using ModCommon.Util;
+using SFCore.Utils;
 
 namespace AbsRadAnyOrb {
     public class AnyOrb : MonoBehaviour {
@@ -12,18 +12,18 @@ namespace AbsRadAnyOrb {
         private PlayMakerFSM controlFSM;
         private PlayMakerFSM attackChoicesFSM;
         private static GameObject[] orbs;
-        private static int NUM_ORBS = 500;
+        private static readonly int NUM_ORBS = 500;
         private int spawningIdx = 0;
         private GameObject currentOrb;
         private static GameObject orbPrefab;
         private GameObject knight;
         private static GameObject eyeBeamGlow = null;
-        private HashSet<GameObject> orbRainOrbs = new HashSet<GameObject>();
-        private HashSet<GameObject> climbOrbs = new HashSet<GameObject>();
+        private HashSet<GameObject> orbRainOrbs = new();
+        private HashSet<GameObject> climbOrbs = new();
         public void Awake() {
-            attackCommandsFSM = base.gameObject.LocateMyFSM("Attack Commands");
-            controlFSM = base.gameObject.LocateMyFSM("Control");
-            attackChoicesFSM = base.gameObject.LocateMyFSM("Attack Choices");
+            attackCommandsFSM = gameObject.LocateMyFSM("Attack Commands");
+            controlFSM = gameObject.LocateMyFSM("Control");
+            attackChoicesFSM = gameObject.LocateMyFSM("Attack Choices");
             knight = GameObject.Find("Knight");
         }
 
@@ -41,24 +41,7 @@ namespace AbsRadAnyOrb {
             a2Choice.eventMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000};
             a2Choice.missedMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000};
 
-            // Configure orbs
-            foreach (GameObject orb in orbs) {
-                PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
-                FsmVar var = new FsmVar();
-                var.SetValue(orb);
-                orbControlFSM.AddAction("Impact", new CallMethod {
-                    behaviour = this,
-                    methodName = "DespawnOrb",
-                    parameters = new FsmVar[1]{var},
-                    everyFrame = false
-                });
-                orbControlFSM.AddAction("Stop Particles", new CallMethod {
-                    behaviour = this,
-                    methodName = "DespawnOrb",
-                    parameters = new FsmVar[1]{var},
-                    everyFrame = false
-                });
-            }
+            // Configure orb attack
             attackCommandsFSM.RemoveAction("Orb Summon", 5);
             attackCommandsFSM.RemoveAction("Orb Summon", 4);
             attackCommandsFSM.RemoveAction("Spawn Fireball", 1);
@@ -162,9 +145,9 @@ namespace AbsRadAnyOrb {
             float orbMaxY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max Y").Value;
             float minDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value;
             float maxDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value;
-            Vector3 radPos = base.gameObject.transform.position;
-            Vector3 innerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -minDist, 0);
-            Vector3 outerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -maxDist, 0);
+            Vector3 radPos = gameObject.transform.position;
+            Vector3 innerCircleStartingPos = gameObject.transform.position + new Vector3(0, -minDist, 0);
+            Vector3 outerCircleStartingPos = gameObject.transform.position + new Vector3(0, -maxDist, 0);
 
             // Spawn along top of range
             for (float x = orbMinX; x < orbMaxX; x += 2f) {
@@ -317,21 +300,29 @@ namespace AbsRadAnyOrb {
             
             for(int i = 0; i < NUM_ORBS; i++) {
                 if (!orbs[i]) {
-                    GameObject orb = GameObject.Instantiate(prefab);
-                    orb.SetActive(false);
+                    GameObject orb = Instantiate(prefab);
                     MeshRenderer orbMeshRenderer = orb.GetComponent<MeshRenderer>();
+                    PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+
+                    orb.SetActive(false);
+
                     orbMeshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
                     orbMeshRenderer.receiveShadows = false;
                     orbMeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     orbMeshRenderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
-                    PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+
                     orbControlFSM.RemoveAction("Init", 9);
                     orbControlFSM.RemoveAction("Init", 8);
                     orbControlFSM.RemoveAction("Init", 7);
                     orbControlFSM.RemoveAction("Init", 6);
-                    // orbControlFSM.RemoveAction("Init", 3);
-                    orbControlFSM.RemoveAction("Init", 1);
+                    orbControlFSM.RemoveAction("Init", 3);
                     orbControlFSM.RemoveAction("Init", 0);
+
+                    orbControlFSM.RemoveAction("Dissipate", 4);
+                    orbControlFSM.RemoveAction("Dissipate", 0);
+
+                    orbControlFSM.RemoveAction("Impact", 11);
+                    orbControlFSM.RemoveAction("Impact", 10);
                     orbControlFSM.RemoveAction("Impact", 8);
                     orbControlFSM.RemoveAction("Impact", 7);
                     orbControlFSM.RemoveAction("Impact", 6);
@@ -339,21 +330,30 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Impact", 4);
                     orbControlFSM.RemoveAction("Impact", 1);
                     orbControlFSM.RemoveAction("Impact", 0);
-                    orbControlFSM.RemoveAction("Stop Particles", 1);
                     orbControlFSM.ChangeTransition("Impact", "FINISHED", "Init");
+
+                    orbControlFSM.RemoveAction("Stop Particles", 1);
+                    orbControlFSM.RemoveAction("Stop Particles", 0);
                     orbControlFSM.ChangeTransition("Stop Particles", "FINISHED", "Init");
-                    for (int j = 0; j < orb.transform.childCount; j++) {
+                    orbControlFSM.RemoveFsmState("Recycle");
+                    orb.LocateMyFSM("Final Control").RemoveFsmState("Recycle");
+
+                    for (int j = orb.transform.childCount - 1; j >= 0; j--) {
                         GameObject child = orb.transform.GetChild(j).gameObject;
-                        if (child.name == "Appear Glow" ||
-                            child.name == "Fader Old" ||
-                            child.name == "Particle System" ||
+                        // if (child.name == "Appear Glow" ||
+                            // child.name == "Fader Old" ||
+                            // child.name == "Fader" ||
+
+                        if (child.name == "Particle System" ||
                             child.name == "Impact" ||
                             child.name == "Impact Particles") {
-                            GameObject.Destroy(child);
+                            DestroyImmediate(child);
                         }
                     }
-                    FsmOwnerDefault ownerDefault = new FsmOwnerDefault();
-                    ownerDefault.OwnerOption = OwnerDefaultOption.UseOwner;
+
+                    FsmOwnerDefault ownerDefault = new() {
+                        OwnerOption = OwnerDefaultOption.UseOwner
+                    };
                     orbControlFSM.AddAction("Impact", new ActivateGameObject {
                         gameObject = ownerDefault,
                         activate = false,
@@ -368,10 +368,9 @@ namespace AbsRadAnyOrb {
                         resetOnExit = false,
                         everyFrame = false
                     });
-                    GameObject.DestroyImmediate(orb.GetComponent<AudioSource>());
-                    PlayMakerFSM finalControlFSM = orb.LocateMyFSM("Final Control");
-                    finalControlFSM.RemoveTransition("Check", "FINISHED");
-                    UnityEngine.Object.DontDestroyOnLoad(orb);
+
+                    DestroyImmediate(orb.GetComponent<AudioSource>());
+                    DontDestroyOnLoad(orb);
 
                     orbs[i] = orb;
 
