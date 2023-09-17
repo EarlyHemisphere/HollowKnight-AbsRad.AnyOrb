@@ -12,7 +12,7 @@ namespace AbsRadAnyOrb {
         private PlayMakerFSM controlFSM;
         private PlayMakerFSM attackChoicesFSM;
         private static GameObject[] orbs;
-        private static readonly int NUM_ORBS = 500;
+        private static readonly int NUM_ORBS = 1250;
         private int spawningIdx = 0;
         private GameObject currentOrb;
         private static GameObject orbPrefab;
@@ -201,7 +201,7 @@ namespace AbsRadAnyOrb {
             if (orbMinY > 150f) {
                 // Final phase
                 for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
-                    float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                    float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                     if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
                         distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
                         continue;
@@ -212,7 +212,7 @@ namespace AbsRadAnyOrb {
             } else {
                 for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
                     for (float y = orbMinY + 1; y <= orbMaxY - 1; y += 2f) {
-                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                         if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
                             distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
                             continue;
@@ -324,7 +324,7 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Impact", 11);
                     orbControlFSM.RemoveAction("Impact", 10);
                     orbControlFSM.RemoveAction("Impact", 8);
-                    orbControlFSM.RemoveAction("Impact", 7);
+                    // orbControlFSM.RemoveAction("Impact", 7);
                     orbControlFSM.RemoveAction("Impact", 6);
                     orbControlFSM.RemoveAction("Impact", 5);
                     orbControlFSM.RemoveAction("Impact", 4);
@@ -332,7 +332,7 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Impact", 0);
                     orbControlFSM.ChangeTransition("Impact", "FINISHED", "Init");
 
-                    orbControlFSM.RemoveAction("Stop Particles", 1);
+                    // orbControlFSM.RemoveAction("Stop Particles", 1);
                     orbControlFSM.RemoveAction("Stop Particles", 0);
                     orbControlFSM.ChangeTransition("Stop Particles", "FINISHED", "Init");
                     orbControlFSM.RemoveFsmState("Recycle");
