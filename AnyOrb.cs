@@ -5,7 +5,6 @@ using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
 using ModCommon.Util;
-using ModCommon;
 
 namespace AbsRadAnyOrb {
     public class AnyOrb : MonoBehaviour {
@@ -13,7 +12,7 @@ namespace AbsRadAnyOrb {
         private PlayMakerFSM controlFSM;
         private PlayMakerFSM attackChoicesFSM;
         private static GameObject[] orbs;
-        private static int NUM_ORBS = 500;
+        private static readonly int NUM_ORBS = 500;
         private int spawningIdx = 0;
         private GameObject currentOrb;
         private static GameObject orbPrefab;
@@ -23,9 +22,9 @@ namespace AbsRadAnyOrb {
         private HashSet<GameObject> climbOrbs = new HashSet<GameObject>();
 
         public void Awake() {
-            attackCommandsFSM = base.gameObject.LocateMyFSM("Attack Commands");
-            controlFSM = base.gameObject.LocateMyFSM("Control");
-            attackChoicesFSM = base.gameObject.LocateMyFSM("Attack Choices");
+            attackCommandsFSM = gameObject.LocateMyFSM("Attack Commands");
+            controlFSM = gameObject.LocateMyFSM("Control");
+            attackChoicesFSM = gameObject.LocateMyFSM("Attack Choices");
             knight = GameObject.Find("Knight");
         }
 
@@ -44,23 +43,6 @@ namespace AbsRadAnyOrb {
             a2Choice.missedMax = new FsmInt[]{10000, 10000, 10000, 10000, 10000, 10000};
 
             // Configure orbs
-            foreach (GameObject orb in orbs) {
-                PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
-                FsmVar var = new FsmVar();
-                var.SetValue(orb);
-                orbControlFSM.AddAction("Impact", new CallMethod {
-                    behaviour = this,
-                    methodName = "DespawnOrb",
-                    parameters = new FsmVar[1]{var},
-                    everyFrame = false
-                });
-                orbControlFSM.AddAction("Stop Particles", new CallMethod {
-                    behaviour = this,
-                    methodName = "DespawnOrb",
-                    parameters = new FsmVar[1]{var},
-                    everyFrame = false
-                });
-            }
             attackCommandsFSM.RemoveAction("Orb Summon", 5);
             attackCommandsFSM.RemoveAction("Orb Summon", 4);
             attackCommandsFSM.RemoveAction("Spawn Fireball", 1);
@@ -319,21 +301,25 @@ namespace AbsRadAnyOrb {
             
             for(int i = 0; i < NUM_ORBS; i++) {
                 if (!orbs[i]) {
-                    GameObject orb = GameObject.Instantiate(prefab);
-                    orb.SetActive(false);
+                    GameObject orb = Instantiate(prefab);
                     MeshRenderer orbMeshRenderer = orb.GetComponent<MeshRenderer>();
+                    PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+
+                    orb.SetActive(false);
+                    
                     orbMeshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
                     orbMeshRenderer.receiveShadows = false;
                     orbMeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     // orbMeshRenderer.rayTracingMode = UnityEngine.Experimental.Rendering.RayTracingMode.Off;
-                    PlayMakerFSM orbControlFSM = orb.LocateMyFSM("Orb Control");
+                    
                     orbControlFSM.RemoveAction("Init", 9);
                     orbControlFSM.RemoveAction("Init", 8);
                     orbControlFSM.RemoveAction("Init", 7);
                     orbControlFSM.RemoveAction("Init", 6);
-                    // orbControlFSM.RemoveAction("Init", 3);
+                    orbControlFSM.RemoveAction("Init", 3);
                     orbControlFSM.RemoveAction("Init", 1);
                     orbControlFSM.RemoveAction("Init", 0);
+
                     orbControlFSM.RemoveAction("Impact", 8);
                     orbControlFSM.RemoveAction("Impact", 7);
                     orbControlFSM.RemoveAction("Impact", 6);
@@ -341,18 +327,21 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Impact", 4);
                     orbControlFSM.RemoveAction("Impact", 1);
                     orbControlFSM.RemoveAction("Impact", 0);
-                    orbControlFSM.RemoveAction("Stop Particles", 1);
                     orbControlFSM.ChangeTransition("Impact", "FINISHED", "Init");
+
+                    orbControlFSM.RemoveAction("Stop Particles", 1);
+                    orbControlFSM.RemoveAction("Stop Particles", 0);
                     orbControlFSM.ChangeTransition("Stop Particles", "FINISHED", "Init");
+
                     for (int j = 0; j < orb.transform.childCount; j++) {
                         GameObject child = orb.transform.GetChild(j).gameObject;
-                        if (child.name == "Appear Glow" ||
-                            child.name == "Fader Old" ||
+                        if (child.name == "Particle System" ||
                             child.name == "Impact" ||
                             child.name == "Impact Particles") {
-                            GameObject.Destroy(child);
+                            DestroyImmediate(child);
                         }
                     }
+
                     FsmOwnerDefault ownerDefault = new FsmOwnerDefault();
                     ownerDefault.OwnerOption = OwnerDefaultOption.UseOwner;
                     orbControlFSM.AddAction("Impact", new ActivateGameObject {
@@ -369,10 +358,11 @@ namespace AbsRadAnyOrb {
                         resetOnExit = false,
                         everyFrame = false
                     });
-                    GameObject.DestroyImmediate(orb.GetComponent<AudioSource>());
+
+                    DestroyImmediate(orb.GetComponent<AudioSource>());
                     PlayMakerFSM finalControlFSM = orb.LocateMyFSM("Final Control");
                     finalControlFSM.RemoveTransition("Check", "FINISHED");
-                    UnityEngine.Object.DontDestroyOnLoad(orb);
+                    DontDestroyOnLoad(orb);
 
                     // Fire orb once so one-time effects don't appear in the Absolute Radiance fight
                     try {

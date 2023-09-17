@@ -40,7 +40,7 @@ namespace AbsRadAnyOrb {
             }
         }
 
-        public override int LoadPriority() => 2; // Initialize after other radiance mods to prevent changes from being overwritten
+        public override int LoadPriority() => -2; // Initialize before other radiance mods
 
         public void Unload() {
             ModHooks.Instance.AfterSavegameLoadHook -= AfterSaveGameLoad;
