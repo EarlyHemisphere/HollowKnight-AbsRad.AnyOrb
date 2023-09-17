@@ -12,7 +12,7 @@ namespace AbsRadAnyOrb {
         private PlayMakerFSM controlFSM;
         private PlayMakerFSM attackChoicesFSM;
         private static GameObject[] orbs;
-        private static readonly int NUM_ORBS = 500;
+        private static readonly int NUM_ORBS = 1250;
         private int spawningIdx = 0;
         private GameObject currentOrb;
         private static GameObject orbPrefab;
@@ -146,13 +146,13 @@ namespace AbsRadAnyOrb {
             float orbMaxY = attackCommandsFSM.FsmVariables.GetFsmFloat("Orb Max Y").Value;
             float minDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value;
             float maxDist = attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value;
-            Vector3 radPos = base.gameObject.transform.position;
-            Vector3 innerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -minDist, 0);
-            Vector3 outerCircleStartingPos = base.gameObject.transform.position + new Vector3(0, -maxDist, 0);
+            Vector3 radPos = gameObject.transform.position;
+            Vector3 innerCircleStartingPos = gameObject.transform.position + new Vector3(0, -minDist, 0);
+            Vector3 outerCircleStartingPos = gameObject.transform.position + new Vector3(0, -maxDist, 0);
 
             // Spawn along top of range
             for (float x = orbMinX; x < orbMaxX; x += 2f) {
-                float distance = Vector2.Distance(new Vector2(x, orbMaxY), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                float distance = Vector2.Distance(new Vector2(x, orbMaxY), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                 if (distance >= minDist && distance <= maxDist) {
                     SpawnOrb(x, orbMaxY);
                 }
@@ -160,7 +160,7 @@ namespace AbsRadAnyOrb {
 
             // Spawn along bottom of range
             for (float x = orbMinX; x < orbMaxX; x += 2f) {
-                float distance = Vector2.Distance(new Vector2(x, orbMinY), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                float distance = Vector2.Distance(new Vector2(x, orbMinY), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                 if (distance >= minDist && distance <= maxDist) {
                     SpawnOrb(x, orbMinY);
                 }
@@ -168,7 +168,7 @@ namespace AbsRadAnyOrb {
 
             // Spawn along left side of range
             for (float y = orbMinY; y < orbMaxY; y += 2f) {
-                float distance = Vector2.Distance(new Vector2(orbMinX, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                float distance = Vector2.Distance(new Vector2(orbMinX, y), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                 if (distance >= minDist && distance <= maxDist) {
                     SpawnOrb(orbMinX, y);
                 }
@@ -176,7 +176,7 @@ namespace AbsRadAnyOrb {
 
             // Spawn along right side of range
             for (float y = orbMinY; y < orbMaxY; y += 2f) {
-                float distance = Vector2.Distance(new Vector2(orbMaxX, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                float distance = Vector2.Distance(new Vector2(orbMaxX, y), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                 if (distance >= minDist && distance <= maxDist) {
                     SpawnOrb(orbMaxX, y);
                 }
@@ -202,7 +202,7 @@ namespace AbsRadAnyOrb {
             if (orbMinY > 150f) {
                 // Final phase
                 for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
-                    float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                    float distance = Vector2.Distance(new Vector2(x, 157), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                     if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
                         distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
                         continue;
@@ -213,7 +213,7 @@ namespace AbsRadAnyOrb {
             } else {
                 for (float x = orbMinX + 1; x <= orbMaxX - 1; x += 2f) {
                     for (float y = orbMinY + 1; y <= orbMaxY - 1; y += 2f) {
-                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(base.gameObject.transform.position.x, base.gameObject.transform.position.y));
+                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(gameObject.transform.position.x, gameObject.transform.position.y));
                         if (distance < attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 6).float2.Value ||
                             distance > attackCommandsFSM.GetAction<FloatCompare>("Orb Pos", 7).float2.Value) {
                             continue;
@@ -321,7 +321,7 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Init", 0);
 
                     orbControlFSM.RemoveAction("Impact", 8);
-                    orbControlFSM.RemoveAction("Impact", 7);
+                    // orbControlFSM.RemoveAction("Impact", 7);
                     orbControlFSM.RemoveAction("Impact", 6);
                     orbControlFSM.RemoveAction("Impact", 5);
                     orbControlFSM.RemoveAction("Impact", 4);
@@ -329,7 +329,7 @@ namespace AbsRadAnyOrb {
                     orbControlFSM.RemoveAction("Impact", 0);
                     orbControlFSM.ChangeTransition("Impact", "FINISHED", "Init");
 
-                    orbControlFSM.RemoveAction("Stop Particles", 1);
+                    // orbControlFSM.RemoveAction("Stop Particles", 1);
                     orbControlFSM.RemoveAction("Stop Particles", 0);
                     orbControlFSM.ChangeTransition("Stop Particles", "FINISHED", "Init");
 
