@@ -58,9 +58,6 @@
     <Reference Include="Assembly-CSharp-firstpass">
       <HintPath>$(HollowKnightRefs)/Assembly-CSharp-firstpass.dll</HintPath>
     </Reference>
-    <Reference Include="ModCommon">
-      <HintPath>$(HollowKnightRefs)/ModCommon.dll</HintPath>
-    </Reference>
     <Reference Include="MMHOOK_Assembly-CSharp">
       <HintPath>$(HollowKnightRefs)/MMHOOK_Assembly-CSharp.dll</HintPath>
     </Reference>
