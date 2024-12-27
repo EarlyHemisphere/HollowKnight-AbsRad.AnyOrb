@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using Modding;
 using UnityEngine;
 using HutongGames.PlayMaker.Actions;
-using ModCommon.Util;
+using SFCore.Utils;
+using UnityEngine.SceneManagement;
 
 namespace AbsRadAnyOrb {
     public class AbsRadAnyOrb : Mod, ITogglableMod {
@@ -13,6 +14,7 @@ namespace AbsRadAnyOrb {
             ModHooks.AfterSavegameLoadHook += AfterSaveGameLoad;
             ModHooks.NewGameHook += AddComponent;
             ModHooks.LanguageGetHook += LangGet;
+            UnityEngine.SceneManagement.SceneManager.activeSceneChanged += SceneChanged;
             Object.DontDestroyOnLoad(preloadedObjects["GG_Radiance"]["Boss Control/Absolute Radiance"]);
             AnyOrb.InstantiateOrbs(preloadedObjects["GG_Radiance"]["Boss Control/Absolute Radiance"].LocateMyFSM("Attack Commands").GetAction<SpawnObjectFromGlobalPool>("Spawn Fireball", 1).gameObject.Value);
 
@@ -53,6 +55,12 @@ namespace AbsRadAnyOrb {
             if (radianceFinder != null) {
                 radianceFinder.Unload();
                 UnityEngine.Object.Destroy(radianceFinder);
+            }
+        }
+
+        public void SceneChanged(Scene from, Scene _) {
+            if (from.name == "GG_Radiance") {
+                AnyOrb.UnloadScene();
             }
         }
     }

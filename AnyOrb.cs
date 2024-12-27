@@ -1,10 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
 using SFCore.Utils;
+
 
 namespace AbsRadAnyOrb {
     public class AnyOrb : MonoBehaviour {
@@ -20,6 +22,7 @@ namespace AbsRadAnyOrb {
         private static GameObject eyeBeamGlow = null;
         private HashSet<GameObject> orbRainOrbs = new();
         private HashSet<GameObject> climbOrbs = new();
+
         public void Awake() {
             attackCommandsFSM = gameObject.LocateMyFSM("Attack Commands");
             controlFSM = gameObject.LocateMyFSM("Control");
@@ -383,6 +386,10 @@ namespace AbsRadAnyOrb {
                     }
                 }
             }
+        }
+
+        public static void UnloadScene() {
+            orbs.ToList().ForEach(orb => orb?.SetActive(false));
         }
     }
 }
