@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
@@ -375,6 +376,10 @@ namespace AbsRadAnyOrb {
                     orbs[i] = orb;
                 }
             }
+        }
+
+        public static void UnloadScene() {
+            orbs.ToList().ForEach(orb => orb?.SetActive(false));
         }
     }
 }
