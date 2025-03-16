@@ -240,7 +240,7 @@ namespace AbsRadAnyOrb {
             for (int _ = 0; _ < 20; _++) {
                 x += UnityEngine.Random.Range(2.5f, 4.0f);
                 currentOrb.transform.SetPosition2D(x, 35f);
-                currentOrb.transform.GetComponent<Rigidbody2D>().isKinematic = false;
+                currentOrb.transform.GetComponent<Rigidbody2D>().isKinematic = true;
                 currentOrb.SetActive(true);
                 orbRainOrbs.Add(currentOrb);
                 IncrementSpawningOrb();
@@ -253,17 +253,18 @@ namespace AbsRadAnyOrb {
                 eyeBeamGlow = GameObject.Find("Eye Beam Glow");
             }
 
+            currentOrb.GetComponent<Rigidbody2D>().isKinematic = true;
             currentOrb.transform.SetPosition2D(eyeBeamGlow.transform.position.x, eyeBeamGlow.transform.position.y);
-            currentOrb.GetComponent<Rigidbody2D>().isKinematic = false;
-
-            // Move orb closer to player when spawning
-            if (eyeBeamGlow.transform.position.y - knight.transform.position.y > 15f) {
-                currentOrb.transform.Translate(new Vector3(Mathf.Tan((rotation - 270) * Mathf.Deg2Rad) * (eyeBeamGlow.transform.position.y - knight.transform.position.y - 15), -(eyeBeamGlow.transform.position.y - knight.transform.position.y - 15)));
-            }
 
             // Rotate orb to face along beam indicator
             currentOrb.transform.eulerAngles = new Vector3(0, 0, rotation / 2); // I have no idea why dividing by 2 is necessary here
 
+            // Move orb closer to player when spawning
+            if (eyeBeamGlow.transform.position.y - knight.transform.position.y > 15f) {
+                currentOrb.transform.Translate(new Vector3(Mathf.Tan((rotation - 270) * Mathf.Deg2Rad) * (eyeBeamGlow.transform.position.y - knight.transform.position.y - 15), -(eyeBeamGlow.transform.position.y - knight.transform.position.y - 15), 0), Space.World);
+            }
+
+            currentOrb.GetComponent<Rigidbody2D>().isKinematic = false;
             currentOrb.SetActive(true);
             climbOrbs.Add(currentOrb);
             IncrementSpawningOrb();
