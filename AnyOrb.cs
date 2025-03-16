@@ -239,8 +239,8 @@ namespace AbsRadAnyOrb {
             float x = 40;
             for (int _ = 0; _ < 20; _++) {
                 x += UnityEngine.Random.Range(2.5f, 4.0f);
-                currentOrb.transform.SetPosition2D(x, 35f);
                 currentOrb.transform.GetComponent<Rigidbody2D>().isKinematic = true;
+                currentOrb.transform.SetPosition2D(x, 35f);
                 currentOrb.SetActive(true);
                 orbRainOrbs.Add(currentOrb);
                 IncrementSpawningOrb();
